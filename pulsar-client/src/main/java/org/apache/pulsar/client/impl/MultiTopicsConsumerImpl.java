@@ -180,7 +180,6 @@ public class MultiTopicsConsumerImpl<T> extends ConsumerBase<T> {
 
     // Check topics are valid.
     // - each topic is valid,
-    // - every topic has same namespace,
     // - topic names are unique.
     private static boolean topicNamesValid(Collection<String> topics) {
         checkState(topics != null && topics.size() >= 1,
@@ -306,6 +305,7 @@ public class MultiTopicsConsumerImpl<T> extends ConsumerBase<T> {
         }
     }
 
+    @Override
     protected synchronized void messageProcessed(Message<?> msg) {
         unAckedMessageTracker.add(msg.getMessageId());
         INCOMING_MESSAGES_SIZE_UPDATER.addAndGet(this, -msg.getData().length);
@@ -707,11 +707,6 @@ public class MultiTopicsConsumerImpl<T> extends ConsumerBase<T> {
     private boolean topicNameValid(String topicName) {
         checkArgument(TopicName.isValid(topicName), "Invalid topic name:" + topicName);
         checkArgument(!topics.containsKey(topicName), "Topics already contains topic:" + topicName);
-
-        if (this.namespaceName != null) {
-            checkArgument(TopicName.get(topicName).getNamespace().toString().equals(this.namespaceName.toString()),
-                "Topic " + topicName + " not in same namespace with Topics");
-        }
 
         return true;
     }
