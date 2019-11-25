@@ -21,23 +21,25 @@ package org.apache.pulsar.client.impl;
 import com.google.common.collect.Sets;
 import io.netty.channel.EventLoopGroup;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import org.apache.pulsar.client.api.*;
+import org.apache.pulsar.client.api.Producer;
+import org.apache.pulsar.client.api.Consumer;
+import org.apache.pulsar.client.api.Message;
+import org.apache.pulsar.client.api.MessageListener;
+import org.apache.pulsar.client.api.PulsarClientException;
+import org.apache.pulsar.client.api.Schema;
 import org.apache.pulsar.client.impl.conf.ClientConfigurationData;
 import org.apache.pulsar.client.impl.conf.ConsumerConfigurationData;
-import org.apache.pulsar.common.api.proto.PulsarApi;
 import org.apache.pulsar.common.util.netty.EventLoopUtil;
-import org.testng.annotations.BeforeTest;
 import org.testng.annotations.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 
 import static org.testng.Assert.assertEquals;
-import static org.testng.TestRunner.PriorityWeight.dependsOnMethods;
+import static org.testng.Assert.assertTrue;
 
 /**
  * Unit Tests of {@link MultiTopicsConsumerImpl}.
@@ -79,34 +81,33 @@ public class MultiTopicsConsumerImplTest {
         conf.setServiceUrl("pulsar://localhost:6650");
         conf.setStatsIntervalSeconds(100);
 
-        ThreadFactory threadFactory = new DefaultThreadFactory("client-test-multi", Thread.currentThread().isDaemon());
-        EventLoopGroup eventLoopGroup = EventLoopUtil.newEventLoopGroup(conf.getNumIoThreads(), threadFactory);
-        ExecutorService listenerExecutor = Executors.newSingleThreadScheduledExecutor(threadFactory);
-        PulsarClientImpl clientImpl = new PulsarClientImpl(conf, eventLoopGroup);
-        ConsumerConfigurationData consumerConfData = new ConsumerConfigurationData();
-        consumerConfData.setTopicNames(Sets.newHashSet(topics));
+        PulsarClientImpl clientImpl = new PulsarClientImpl(conf);
 
         Consumer consumer = clientImpl.newConsumer().topics(topics)
                 .subscriptionName("multiTopicSubscription")
                 .messageListener(new MessageListener<byte[]>() {
                     @Override
                     public void received(Consumer<byte[]> consumer, Message<byte[]> msg) {
-                        System.out.println(" Message received:" + new String(msg.getData()));
+                       if("producer".equals(msg.getProducerName()) || "producer1".equals(msg.getProducerName())){
+                           String message = new String(msg.getData());
+                           assertTrue(message.contains("MultiTopics"));
+                       }
                     }
                 })
                 .subscribe();
 
         Producer<String> producer = clientImpl.newProducer(Schema.STRING)
                 .topic("persistent://public/default/MultiTopics1")
+                .producerName("producer")
                 .create();
         Producer<String> producer1 = clientImpl.newProducer(Schema.STRING)
                 .topic("persistent://public/test-multi/MultiTopics2")
+                .producerName("producer1")
                 .create();
         producer.send("default/MultiTopics1-Message1");
         producer1.send("test-multi/MultiTopics2-Message1");
         producer.closeAsync();
         producer1.closeAsync();
-
         consumer.closeAsync();
     }
 }
