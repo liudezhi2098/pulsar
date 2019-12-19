@@ -18,17 +18,30 @@
  */
 package org.apache.pulsar.client.impl;
 
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertNotNull;
-import static org.testng.Assert.assertNull;
-import static org.testng.Assert.assertTrue;
-import static org.testng.Assert.fail;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-
 import io.netty.util.Timeout;
+import org.apache.pulsar.broker.service.Topic;
+import org.apache.pulsar.broker.service.persistent.PersistentSubscription;
+import org.apache.pulsar.client.admin.PulsarAdminException;
+import org.apache.pulsar.client.api.Consumer;
+import org.apache.pulsar.client.api.Message;
+import org.apache.pulsar.client.api.MessageId;
+import org.apache.pulsar.client.api.MessageRoutingMode;
+import org.apache.pulsar.client.api.Producer;
+import org.apache.pulsar.client.api.ProducerConsumerBase;
+import org.apache.pulsar.client.api.PulsarClientException;
+import org.apache.pulsar.client.api.Schema;
+import org.apache.pulsar.client.api.SubscriptionType;
+import org.apache.pulsar.common.policies.data.ClusterData;
+import org.apache.pulsar.common.policies.data.TenantInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.testng.annotations.AfterMethod;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Test;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -41,23 +54,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
-import org.apache.pulsar.broker.service.Topic;
-import org.apache.pulsar.broker.service.persistent.PersistentSubscription;
-import org.apache.pulsar.client.api.Consumer;
-import org.apache.pulsar.client.api.Message;
-import org.apache.pulsar.client.api.MessageId;
-import org.apache.pulsar.client.api.MessageRoutingMode;
-import org.apache.pulsar.client.api.Producer;
-import org.apache.pulsar.client.api.ProducerConsumerBase;
-import org.apache.pulsar.client.api.PulsarClientException;
-import org.apache.pulsar.client.api.SubscriptionType;
-import org.apache.pulsar.common.policies.data.ClusterData;
-import org.apache.pulsar.common.policies.data.TenantInfo;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.testng.annotations.AfterMethod;
-import org.testng.annotations.BeforeMethod;
-import org.testng.annotations.Test;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.fail;
 
 @SuppressWarnings({ "unchecked", "rawtypes" })
 public class TopicsConsumerImplTest extends ProducerConsumerBase {
@@ -893,6 +893,55 @@ public class TopicsConsumerImplTest extends ProducerConsumerBase {
         producer1.close();
         producer2.close();
         producer3.close();
+    }
+
+    @Test(timeOut = testTimeout)
+    public void multiTopicsInDifferentNameSpace() throws PulsarAdminException, PulsarClientException {
+        List<String> topics = new ArrayList<>();
+        topics.add("persistent://public/default/MultiTopics1");
+        topics.add("persistent://public/test-multi/MultiTopics2");
+        topics.add("persistent://public/test-multi/MultiTopics3");
+        admin.namespaces().createNamespace("public/test-multi");
+        Consumer consumer = pulsarClient.newConsumer()
+                .topics(topics)
+                .subscriptionName("multiTopicSubscription")
+                .subscriptionType(SubscriptionType.Exclusive)
+                .subscribe();
+        // create Producer
+        Producer<String> producer = pulsarClient.newProducer(Schema.STRING)
+                .topic("persistent://public/default/MultiTopics1")
+                .producerName("producer")
+                .create();
+        Producer<String> producer1 = pulsarClient.newProducer(Schema.STRING)
+                .topic("persistent://public/test-multi/MultiTopics2")
+                .producerName("producer1")
+                .create();
+        Producer<String> producer2 = pulsarClient.newProducer(Schema.STRING)
+                .topic("persistent://public/test-multi/MultiTopics3")
+                .producerName("producer2")
+                .create();
+        //send message
+        producer.send("default/MultiTopics1-Message1");
+
+        producer1.send("test-multi/MultiTopics2-Message1");
+
+        producer1.send("test-multi/MultiTopics3-Message1");
+
+        int messageSet = 0;
+        Message<byte[]> message = consumer.receive();
+        do {
+            messageSet ++;
+            consumer.acknowledge(message);
+            log.info("Consumer acknowledged : " + new String(message.getData()));
+            message = consumer.receive(200, TimeUnit.MILLISECONDS);
+        } while (message != null);
+        assertEquals(messageSet, 3);
+
+        consumer.unsubscribe();
+        consumer.close();
+        producer.close();
+        producer1.close();
+        producer2.close();
     }
 
 }
