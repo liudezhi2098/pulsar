@@ -94,13 +94,13 @@ public class TopicsConsumerImplTest extends ProducerConsumerBase {
 
         // 2. Create consumer
         try {
-            pulsarClient.newConsumer()
+            Consumer consumer = pulsarClient.newConsumer()
                 .topics(topicNames)
                 .subscriptionName(subscriptionName)
                 .subscriptionType(SubscriptionType.Shared)
                 .ackTimeout(ackTimeOutMillis, TimeUnit.MILLISECONDS)
                 .subscribe();
-            fail("subscribe for topics from different namespace should fail.");
+            assertTrue(consumer instanceof MultiTopicsConsumerImpl);
         } catch (IllegalArgumentException e) {
             // expected for have different namespace
         }
@@ -901,6 +901,7 @@ public class TopicsConsumerImplTest extends ProducerConsumerBase {
         topics.add("persistent://public/default/MultiTopics1");
         topics.add("persistent://public/test-multi/MultiTopics2");
         topics.add("persistent://public/test-multi/MultiTopics3");
+        admin.tenants().createTenant("public",new TenantInfo());
         admin.namespaces().createNamespace("public/test-multi");
         Consumer consumer = pulsarClient.newConsumer()
                 .topics(topics)
